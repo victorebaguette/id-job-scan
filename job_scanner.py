@@ -29,19 +29,33 @@ STATE_FILE = os.path.join(BASE_DIR, "seen_jobs.json")
 # ═══════════════════════════════════════════════════════════════
 
 ID_KEYWORDS = {
-    "industrial design": 3, "industrial designer": 3, "product design": 3,
-    "design industriel": 3, "designer industriel": 3, "designer produit": 3,
-    "transportation design": 3, "design engineer": 2, "cmf design": 3,
-    "cmf designer": 3, "cabin interior": 2, "product designer": 3,
-    "furniture design": 2, "packaging design": 2, "consumer product": 2,
+    # CORE industrial/product design (highest weight)
+    "industrial design": 4, "industrial designer": 4, "product design": 4,
+    "product designer": 4, "design industriel": 4, "designer industriel": 4,
+    "designer produit": 4, "design engineer": 3,
+    # Adjacent fields (medium weight — interesting but not core)
+    "transportation design": 2, "furniture design": 2,
+    "packaging design": 2, "consumer product": 2, "cabin interior": 1,
+    "cmf designer": 1, "cmf design": 1, "color material": 1,
+    "colour material": 1,
+    # Software/tools (signal of real ID work)
     "rhino": 2, "grasshopper": 2, "keyshot": 2, "solidworks": 2,
     "fusion 360": 2, "blender": 1, "alias": 2, "catia": 2, "vred": 2,
+    # Junior-friendly
     "junior": 1, "stage": 1, "alternance": 1, "entry level": 1,
     "graduate": 1, "internship": 1, "apprentice": 1,
-    "graphic design": -2, "ux design": -2, "ui design": -2, "ux/ui": -2,
-    "web design": -2, "frontend": -3, "backend": -3, "fullstack": -3,
+    "stagiaire": 1, "jeune diplômé": 1, "apprentissage": 1,
+    # Negative: NOT industrial design (reject hard)
+    "graphic design": -2, "graphic designer": -2, 
+    "ux design": -2, "ui design": -2, "ux/ui": -2, "ux/ui design": -2,
+    "web design": -2, "web designer": -2,
+    "frontend": -3, "backend": -3, "fullstack": -3,
     "social media": -3, "data analyst": -3, "content creator": -2,
     "video editor": -2, "devops": -3, "software engineer": -3,
+    "software developer": -3, "data scientist": -3,
+    # Automotive-specific: penalize unless combined with industrial/product
+    "automotive designer": -2, "car designer": -2,
+    "vehicle designer": -1, "automotive design": -1,
 }
 
 def score_job(title, company="", description=""):
@@ -313,6 +327,95 @@ def check_companies():
 # TELEGRAM RICH MESSAGE
 # ═══════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════
+# TELEGRAM RICH MESSAGE with emoji & country/domain markers
+# ═══════════════════════════════════════════════════════════════
+
+COUNTRY_EMOJI = {
+    "france": "🇫🇷", "paris": "🇫🇷", "lyon": "🇫🇷", "marseille": "🇫🇷",
+    "toulouse": "🇫🇷", "bordeaux": "🇫🇷", "lille": "🇫🇷", "nice": "🇫🇷",
+    "nantes": "🇫🇷", "strasbourg": "🇫🇷", "rennes": "🇫🇷", "île-de-france": "🇫🇷",
+    "annecy": "🇫🇷", "biarritz": "🇫🇷", "grenoble": "🇫🇷",
+    "switzerland": "🇨🇭", "suisse": "🇨🇭", "zurich": "🇨🇭", "geneva": "🇨🇭",
+    "lausanne": "🇨🇭", "bern": "🇨🇭", "basel": "🇨🇭",
+    "germany": "🇩🇪", "allemagne": "🇩🇪", "berlin": "🇩🇪", "munich": "🇩🇪",
+    "hamburg": "🇩🇪", "stuttgart": "🇩🇪", "wolfsburg": "🇩🇪",
+    "united kingdom": "🇬🇧", "uk": "🇬🇧", "london": "🇬🇧", "england": "🇬🇧",
+    "italy": "🇮🇹", "italie": "🇮🇹", "milan": "🇮🇹", "turin": "🇮🇹",
+    "spain": "🇪🇸", "espagne": "🇪🇸", "barcelona": "🇪🇸", "madrid": "🇪🇸",
+    "netherlands": "🇳🇱", "amsterdam": "🇳🇱", "eindhoven": "🇳🇱",
+    "sweden": "🇸🇪", "stockholm": "🇸🇪", "gothenburg": "🇸🇪",
+    "denmark": "🇩🇰", "copenhagen": "🇩🇰",
+    "belgium": "🇧🇪", "bruxelles": "🇧🇪", "brussels": "🇧🇪",
+    "austria": "🇦🇹", "vienna": "🇦🇹",
+    "usa": "🇺🇸", "united states": "🇺🇸", "california": "🇺🇸",
+    "new york": "🇺🇸", "san francisco": "🇺🇸", "portland": "🇺🇸",
+    "canada": "🇨🇦", "montreal": "🇨🇦", "toronto": "🇨🇦",
+    "china": "🇨🇳", "shenzhen": "🇨🇳", "shanghai": "🇨🇳",
+    "japan": "🇯🇵", "tokyo": "🇯🇵",
+    "remote": "🌐", "worldwide": "🌐", "europe": "🇪🇺",
+}
+
+def _country_flag(location):
+    """Return flag emoji for a location string."""
+    if not location:
+        return "🌍"
+    loc_lower = location.lower().strip()
+    for key, emoji in COUNTRY_EMOJI.items():
+        if key in loc_lower:
+            return emoji
+    return "🌍"
+
+def _domain_emoji(job):
+    """Infer domain emoji from title + company."""
+    title = (job.get("title") or "").lower()
+    company = (job.get("company") or "").lower()
+    text = f"{title} {company}"
+
+    if any(kw in text for kw in ["automotive", "car ", "vehicle", "bmw", "porsche", "ferrari", "lambo", "renault", "peugeot", "citroën", "nissan", "toyota"]):
+        return "🚗"
+    if any(kw in text for kw in ["watch", "rolex", "cartier", "omega", "audemars", "patek", "breitling", "horlog", "luxury", "jewel"]):
+        return "💎"
+    if any(kw in text for kw in ["furniture", "meuble", "chair", "table", "ikea", "lamp", "luminaire"]):
+        return "🪑"
+    if any(kw in text for kw in ["sport", "nike", "adidas", "salomon", "decathlon", "arc", "outdoor", "bike"]):
+        return "⚽"
+    if any(kw in text for kw in ["toy", "lego", "jouet", "game", "nintendo"]):
+        return "🧸"
+    if any(kw in text for kw in ["medical", "health", "surgical", "pharma", "device"]):
+        return "🏥"
+    if any(kw in text for kw in ["packaging", "emballage", "cosmetic", "beauty", "loreal"]):
+        return "📦"
+    if any(kw in text for kw in ["kitchen", "cuisine", "appliance", "electrolux", "dyson", "seb", "tefal"]):
+        return "🍳"
+    if any(kw in text for kw in ["lighting", "lamp", "éclairage", "led"]):
+        return "💡"
+    if any(kw in text for kw in ["shoe", "chaussure", "footwear", "sneaker"]):
+        return "👟"
+    if any(kw in text for kw in ["audio", "speaker", "headphone", "sound", "bose", "sonos", "bang", "devialet"]):
+        return "🎧"
+    if any(kw in text for kw in ["phone", "smartphone", "apple", "samsung", "nothing", "fairphone"]):
+        return "📱"
+    if any(kw in text for kw in ["aerospace", "aviation", "airbus", "boeing", "drone", "satellite"]):
+        return "✈️"
+    if any(kw in text for kw in ["agency", "consult", "studio", "ideo", "frog", "wedge", "design firm"]):
+        return "🏢"
+    return "🏭"  # generic industry
+
+def _level_badge(level_list):
+    """Return level badge: 🟢 junior, 🟡 mid, 🔴 senior, ⚪ unknown."""
+    if not level_list:
+        return "⚪"
+    text = " ".join(level_list).lower()
+    if any(kw in text for kw in ["junior", "stage", "intern", "graduate", "stagiaire", "alternance"]):
+        return "🟢"
+    if any(kw in text for kw in ["senior", "lead", "expert", "director"]):
+        return "🔴"
+    if any(kw in text for kw in ["confirmé", "mid"]):
+        return "🟡"
+    return "⚪"
+
+
 def _load_bot_token():
     token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
     if not token:
@@ -328,94 +431,99 @@ def _load_bot_token():
     return token
 
 def send_telegram_rich(new_jobs, all_count, new_count, today):
-    """Send rich Telegram message with collapsible per-job details."""
+    """Send rich Telegram message to MTQ Tickers with collapsible job panels."""
     token = _load_bot_token()
-    # MTQ Tickers chat (status channel — less busy than trades)
-    chat_id = os.environ.get("TELEGRAM_STATUS_CHAT_ID", "-5164828196")
+    # MTQ Tickers channel — not the busy Status channel
+    chat_id = os.environ.get("TELEGRAM_TICKERS_CHAT_ID", "-5136300760")
 
     if not token:
         print("📭 Telegram skipped (no token)")
         return
 
-    # Sort new jobs by score
     new_top = [j for j in new_jobs if j.get("score", 0) >= 5]
     new_good = [j for j in new_jobs if 3 <= j.get("score", 0) < 5]
     new_okay = [j for j in new_jobs if 1 <= j.get("score", 0) < 3]
 
-    # Build rich HTML for Telegram sendRichMessage
     html_parts = []
 
-    # Header
     if new_count == 0:
         html_parts.append(f"🔍 <b>Job Scan — {today}</b>")
         html_parts.append(f"📊 {all_count} offres scannées · 0 nouvelle")
         html_parts.append("")
-        html_parts.append("<i>Pas de nouvelle offre aujourd'hui. À demain.</i>")
+        html_parts.append("<i>Pas de nouvelle offre aujourd'hui.</i>")
     else:
-        icon = "🟢" if len(new_top) >= 3 else "🟡" if len(new_top) >= 1 else "⚪"
-        html_parts.append(f"🔍 <b>Job Scan — {today}</b>")
-        html_parts.append(f"{icon} <b>{new_count} nouvelle(s) offre(s)</b> sur {all_count} scannées")
-        html_parts.append(f"🔥 {len(new_top)} top · ⭐ {len(new_good)} bon · 📌 {len(new_okay)} partiel")
+        top_icon = "🟢" if len(new_top) >= 5 else "🟡" if len(new_top) >= 2 else "⚪"
+        html_parts.append(f"🔍 <b>ID Job Scan · {today}</b>")
+        html_parts.append(f"{top_icon} <b>{new_count} novelle(s)</b> | {all_count} scannées | 🔥{len(new_top)} ⭐{len(new_good)} 📌{len(new_okay)}")
         html_parts.append("")
 
-        # Top priority jobs with full details
+        # ── TOP PRIORITY  ──
         if new_top:
-            html_parts.append("<b>🔥 TOP PRIORITY</b>")
+            html_parts.append("<b>━━━ 🔥 TOP PRIORITY ━━━</b>")
             html_parts.append("")
-            for j in new_top[:15]:
+            for j in new_top[:12]:
+                flag = _country_flag(j.get("location", ""))
+                domain = _domain_emoji(j)
+                level_badge = _level_badge(j.get("level", []))
                 title = _escape_html(j["title"])
                 company = _escape_html(j.get("company", "—"))
                 location = _escape_html(j.get("location", "—"))
-                level = "/".join(j.get("level", [])) or "—"
-                source = j.get("source", "?")
-                score = j.get("score", 0)
                 link = j.get("link", "")
-                matched = ", ".join(j.get("matched", [])[:4])
+                source = j.get("source", "?")
+                matched = ", ".join(j.get("matched", [])[:3])
+                level_text = "/".join(j.get("level", [])) or "—"
 
-                # Collapsible per-job panel
-                header_line = f"🔥{score} · {title[:50]}"
+                # Compact header line
+                header = f"{domain} 🔥{j['score']} · {flag} {title[:45]}"
                 if company and company != "—":
-                    header_line += f" — {company[:25]}"
+                    header += f" · {company[:20]}"
+                header += f" · {level_badge}"
+
                 html_parts.append(f"<details>")
-                html_parts.append(f"<summary>{header_line}</summary>")
+                html_parts.append(f"<summary>{header}</summary>")
                 html_parts.append("")
-                html_parts.append(f"<b>Poste:</b> {title}")
-                html_parts.append(f"<b>Entreprise:</b> {company}")
-                html_parts.append(f"<b>Lieu:</b> {location}")
-                html_parts.append(f"<b>Niveau:</b> {level}")
-                html_parts.append(f"<b>Source:</b> {source}")
+                html_parts.append(f"<b>{domain} {title}</b>")
+                html_parts.append(f"🏢 <b>{company}</b>")
+                html_parts.append(f"{flag} <b>{location}</b>")
+                html_parts.append(f"🎯 <b>Niveau:</b> {level_badge} {level_text}")
+                html_parts.append(f"📡 <b>Source:</b> {source}")
                 if matched:
-                    html_parts.append(f"<b>Match:</b> {matched}")
+                    html_parts.append(f"🏷️ <b>Match:</b> {matched}")
                 if link:
-                    html_parts.append(f'<b>Lien:</b> <a href="{link}">Voir l\'offre →</a>')
+                    html_parts.append(f'👉 <a href="{link}">Voir l\'offre</a>')
                 html_parts.append("")
                 html_parts.append("</details>")
             html_parts.append("")
 
-        # Good matches (compact list)
+        # ── GOOD MATCHES  ──
         if new_good:
-            html_parts.append("<b>⭐ BON MATCH</b>")
+            html_parts.append("<b>━━━ ⭐ BON MATCH ━━━</b>")
             html_parts.append("")
             for j in new_good[:10]:
-                title = _escape_html(j["title"][:50])
+                flag = _country_flag(j.get("location", ""))
+                domain = _domain_emoji(j)
+                level_badge = _level_badge(j.get("level", []))
+                title = _escape_html(j["title"][:45])
                 company = _escape_html(j.get("company", "—")[:20])
-                location = _escape_html(j.get("location", "—")[:20])
+                location = _escape_html(j.get("location", "—")[:25])
                 link = j.get("link", "")
-                line = f"⭐{j.get('score',0)} {title} — {company} ({location})"
+
+                line = f"{domain} ⭐{j['score']} {flag} {level_badge} {title} · {company} · {location}"
                 if link:
                     line = f'<a href="{link}">{line}</a>'
-                html_parts.append(line)
+                html_parts.append(f"· {line}")
             html_parts.append("")
 
-        # Okay matches (just count)
+        # ── PARTIAL ──
         if new_okay:
             html_parts.append(f"<details>")
-            html_parts.append(f"<summary>📌 Partiel ({len(new_okay)}) — cliquer pour déplier</summary>")
+            html_parts.append(f"<summary>📌 <b>Matchs partiels ({len(new_okay)})</b></summary>")
             html_parts.append("")
-            for j in new_okay[:20]:
-                title = _escape_html(j["title"][:50])
+            for j in new_okay[:15]:
+                flag = _country_flag(j.get("location", ""))
+                title = _escape_html(j["title"][:45])
                 company = _escape_html(j.get("company", "—")[:20])
-                html_parts.append(f"· {title} — {company}")
+                html_parts.append(f"· 📌{j['score']} {flag} {title} · {company}")
             html_parts.append("")
             html_parts.append("</details>")
 
@@ -426,7 +534,7 @@ def send_telegram_rich(new_jobs, all_count, new_count, today):
         payload = {"chat_id": chat_id, "rich_message": {"markdown": html}}
         r = requests.post(url, json=payload, timeout=15)
         if r.status_code == 200:
-            print(f"📨 Telegram sent to MTQ Tickers ({new_count} new jobs)")
+            print(f"📨 Telegram → MTQ Tickers ({new_count} new jobs)")
         else:
             print(f"📨 Telegram error: {r.status_code} {r.text[:200]}")
     except Exception as e:
