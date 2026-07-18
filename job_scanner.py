@@ -30,14 +30,13 @@ STATE_FILE = os.path.join(BASE_DIR, "seen_jobs.json")
 
 ID_KEYWORDS = {
     # CORE industrial/product design (highest weight)
-    "industrial design": 4, "industrial designer": 4, "product design": 4,
-    "product designer": 4, "design industriel": 4, "designer industriel": 4,
-    "designer produit": 4, "design engineer": 3,
-    # Adjacent fields (medium weight — interesting but not core)
+    "industrial design": 5, "industrial designer": 5, "product design": 5,
+    "product designer": 5, "design industriel": 5, "designer industriel": 5,
+    "designer produit": 5, "design engineer": 4,
+    # Adjacent fields (medium weight)
     "transportation design": 2, "furniture design": 2,
     "packaging design": 2, "consumer product": 2, "cabin interior": 1,
     "cmf designer": 1, "cmf design": 1, "color material": 1,
-    "colour material": 1,
     # Software/tools (signal of real ID work)
     "rhino": 2, "grasshopper": 2, "keyshot": 2, "solidworks": 2,
     "fusion 360": 2, "blender": 1, "alias": 2, "catia": 2, "vred": 2,
@@ -45,9 +44,9 @@ ID_KEYWORDS = {
     "junior": 1, "stage": 1, "alternance": 1, "entry level": 1,
     "graduate": 1, "internship": 1, "apprentice": 1,
     "stagiaire": 1, "jeune diplômé": 1, "apprentissage": 1,
-    # Negative: NOT industrial design (reject hard)
-    "graphic design": -2, "graphic designer": -2, 
-    "ux design": -2, "ui design": -2, "ux/ui": -2, "ux/ui design": -2,
+    # Negative: NOT industrial design
+    "graphic design": -2, "graphic designer": -2,
+    "ux design": -2, "ui design": -2, "ux/ui": -2,
     "web design": -2, "web designer": -2,
     "frontend": -3, "backend": -3, "fullstack": -3,
     "social media": -3, "data analyst": -3, "content creator": -2,
@@ -58,15 +57,53 @@ ID_KEYWORDS = {
     "vehicle designer": -1, "automotive design": -1,
 }
 
+# Premium companies — bonus points for known industrial design employers
+PREMIUM_COMPANIES = {
+    # Design-led brands
+    "ideo": 2, "frog design": 2, "smart design": 2, "seymourpowell": 2,
+    "priestmangoode": 2, "layer": 2, "dca design": 2, "kinneir dufort": 2,
+    "tangerine": 2, "design partners": 2, "pdd": 2, "native design": 2,
+    "map project office": 2, "barber osgerby": 1, "teenage engineering": 2,
+    # Premium brands known for design
+    "apple": 3, "dyson": 3, "bang & olufsen": 3, "bose": 2, "sonos": 2,
+    "nike": 2, "lego": 3, "ikea": 2, "philips": 2, "braun": 2,
+    "hermès": 2, "rolex": 2, "cartier": 2, "logitech": 2, "devialet": 2,
+    "nothing": 2, "framework": 1,
+    # Automotive design studios (still ID-relevant)
+    "bmw": 1, "porsche": 1, "ferrari": 1, "polestar": 1, "nio": 1,
+    "renault": 1, "peugeot": 1, "citroën": 1, "volvo cars": 1,
+    "volvo group": 1, "mercedes-benz": 1, "audi": 1,
+    # French design employers
+    "decathlon": 2, "seb": 2, "tefal": 1, "schneider electric": 1,
+    "saint-gobain": 1, "l'oréal": 1, "chanel": 2, "lv": 1, "lvmh": 2,
+    "dassault": 1, "airbus": 1, "safran": 1, "thales": 1, "valeo": 1,
+    "michelin": 1, "somfy": 1, "faurecia": 1, "forvia": 1,
+    "jcdecaux": 2, "saint laurent": 2, "balenciaga": 2, "givenchy": 2,
+    # Swiss
+    "nestlé": 1, "audemars piguet": 2, "patek philippe": 2, "breitling": 2,
+    "victorinox": 2, "freitag": 2, "on running": 1,
+    # European
+    "electrolux": 1, "adidas": 1, "puma": 1, "salomon": 1,
+    "samsung": 1, "huawei": 1, "xiaomi": 1, "microsoft": 1, "google": 1,
+    "amazon": 1, "meta": 1,
+}
+
 def score_job(title, company="", description=""):
     text = f"{title} {company} {description}".lower()
     score = 0
     matched = []
+    # Keyword scoring
     for kw, weight in ID_KEYWORDS.items():
         if kw in text:
             score += weight
             if weight > 0:
                 matched.append(kw)
+    # Premium company bonus
+    for brand, bonus in PREMIUM_COMPANIES.items():
+        if brand in text:
+            score += bonus
+            matched.append(f"🏷️{brand}(+{bonus})")
+            break  # Only apply the best match
     return score, matched
 
 LEVEL_PATTERNS = {
@@ -138,14 +175,59 @@ def filter_new(all_jobs, seen):
 # SOURCES (same as v2)
 # ═══════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════
+# SOURCE 1: LINKEDIN GUEST API — expanded European coverage
+# ═══════════════════════════════════════════════════════════════
+
 LINKEDIN_SEARCHES = [
-    {"kw": "industrial design", "locs": ["France", "Switzerland", "Europe", "Remote"]},
-    {"kw": "product designer", "locs": ["France", "Switzerland"]},
+    # ── France ──
+    {"kw": "industrial design", "locs": ["France", "Remote"]},
+    {"kw": "product designer", "locs": ["France"]},
     {"kw": "design industriel", "locs": ["France"]},
-    {"kw": "transportation design", "locs": ["France", "Europe"]},
-    {"kw": "design engineer industrial", "locs": ["France", "Europe"]},
-    {"kw": "CMF designer", "locs": ["France", "Europe"]},
-    {"kw": "furniture designer", "locs": ["France", "Europe"]},
+    {"kw": "designer industriel", "locs": ["France"]},
+    {"kw": "designer produit", "locs": ["France"]},
+    {"kw": "design engineer industrial", "locs": ["France"]},
+    {"kw": "furniture designer", "locs": ["France"]},
+    # ── Switzerland (FR/DE/IT) ──
+    {"kw": "industrial design", "locs": ["Switzerland"]},
+    {"kw": "product designer", "locs": ["Switzerland"]},
+    {"kw": "design industriel", "locs": ["Switzerland"]},
+    {"kw": "designer industriel", "locs": ["Switzerland"]},
+    {"kw": "designer produkt", "locs": ["Switzerland"]},    # German
+    {"kw": "industrial designer", "locs": ["Switzerland"]},
+    # ── Germany ──
+    {"kw": "industrial design", "locs": ["Germany"]},
+    {"kw": "produktdesigner", "locs": ["Germany"]},
+    {"kw": "industrial designer", "locs": ["Germany"]},
+    {"kw": "produktdesign", "locs": ["Germany"]},
+    {"kw": "design engineer", "locs": ["Germany"]},
+    # ── Italy ──
+    {"kw": "industrial design", "locs": ["Italy"]},
+    {"kw": "design industriale", "locs": ["Italy"]},
+    {"kw": "product designer", "locs": ["Italy"]},
+    {"kw": "designer prodotto", "locs": ["Italy"]},
+    # ── Spain ──
+    {"kw": "industrial design", "locs": ["Spain"]},
+    {"kw": "design industrial", "locs": ["Spain"]},
+    {"kw": "designer producto", "locs": ["Spain"]},
+    # ── UK ──
+    {"kw": "industrial design", "locs": ["United Kingdom"]},
+    {"kw": "product designer", "locs": ["United Kingdom"]},
+    {"kw": "design engineer", "locs": ["United Kingdom"]},
+    {"kw": "furniture designer", "locs": ["United Kingdom"]},
+    # ── Benelux ──
+    {"kw": "industrial design", "locs": ["Netherlands"]},
+    {"kw": "product designer", "locs": ["Netherlands"]},
+    {"kw": "industrieel ontwerp", "locs": ["Netherlands"]},
+    {"kw": "industrial design", "locs": ["Belgium"]},
+    {"kw": "product designer", "locs": ["Belgium"]},
+    # ── Scandinavia ──
+    {"kw": "industrial design", "locs": ["Sweden"]},
+    {"kw": "industrial design", "locs": ["Denmark"]},
+    # ── Pan-European ──
+    {"kw": "CMF designer", "locs": ["Europe"]},
+    {"kw": "transportation design", "locs": ["Europe"]},
+    {"kw": "packaging design", "locs": ["Europe"]},
 ]
 
 def scrape_linkedin(keywords, location, max_results=25):
@@ -372,6 +454,38 @@ def _domain_emoji(job):
     company = (job.get("company") or "").lower()
     text = f"{title} {company}"
 
+    # ── Company-specific overrides (most accurate) ──
+    OVERRIDES = {
+        "decathlon": "⚽", "salomon": "⚽", "nike": "👟", "adidas": "👟", "puma": "👟",
+        "on running": "👟", "arc'teryx": "🏔️", "fjällräven": "🏔️",
+        "lego": "🧸", "ikea": "🪑", "vitra": "🪑",
+        "dyson": "🍳", "seb": "🍳", "tefal": "🍳", "electrolux": "🍳",
+        "bose": "🎧", "sonos": "🎧", "bang & olufsen": "🎧", "devialet": "🎧",
+        "apple": "📱", "nothing": "📱", "samsung": "📱",
+        "philips": "🏥", "braun": "🏥",
+        "rolex": "💎", "cartier": "💎", "audemars piguet": "💎",
+        "patek philippe": "💎", "breitling": "💎", "omega": "💎",
+        "hermès": "💎", "chanel": "💎", "lvmh": "💎", "richemont": "💎",
+        "saint laurent": "💎", "balenciaga": "💎", "givenchy": "💎",
+        "renault": "🚗", "peugeot": "🚗", "citroën": "🚗", "stellantis": "🚗",
+        "bmw": "🚗", "porsche": "🚗", "ferrari": "🚗", "lamborghini": "🚗",
+        "nio": "🚗", "polestar": "🚗", "volvo": "🚗", "mercedes": "🚗",
+        "audi": "🚗", "volkswagen": "🚗", "jaguar": "🚗", "rivian": "🚗",
+        "airbus": "✈️", "dassault aviation": "✈️", "safran": "✈️",
+        "l'oréal": "📦", "sephora": "📦",
+        "ideo": "🏢", "frog design": "🏢", "smart design": "🏢",
+        "seymourpowell": "🏢", "design partners": "🏢", "wedge": "🏢",
+        "rcp design": "🏢", "5.5 design": "🏢", "klip design": "🏢",
+        "michelin": "🛞", "faurecia": "🚗", "forvia": "🚗", "valeo": "🚗",
+        "logitech": "🖱️", "victorinox": "🔪", "freitag": "🎒",
+        "nestlé": "🍫", "lindt": "🍫",
+        "schneider electric": "⚡", "legrand": "⚡", "somfy": "🏠",
+        "thales": "🛰️", "saint-gobain": "🏗️",
+    }
+    for key, emoji in OVERRIDES.items():
+        if key in text:
+            return emoji
+
     if any(kw in text for kw in ["automotive", "car ", "vehicle", "bmw", "porsche", "ferrari", "lambo", "renault", "peugeot", "citroën", "nissan", "toyota"]):
         return "🚗"
     if any(kw in text for kw in ["watch", "rolex", "cartier", "omega", "audemars", "patek", "breitling", "horlog", "luxury", "jewel"]):
@@ -490,7 +604,7 @@ def send_telegram_rich(new_jobs, all_count, new_count, today):
                 if matched:
                     html_parts.append(f"🏷️ <b>Match:</b> {matched}")
                 if link:
-                    html_parts.append(f'👉 <a href="{link}">Voir l\'offre</a>')
+                    html_parts.append(f'📩 <a href="{link}">Postuler / Voir l\'offre</a>')
                 html_parts.append("")
                 html_parts.append("</details>")
             html_parts.append("")
