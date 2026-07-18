@@ -52,7 +52,10 @@ ID_KEYWORDS = {
     "social media": -3, "data analyst": -3, "content creator": -2,
     "video editor": -2, "devops": -3, "software engineer": -3,
     "software developer": -3, "data scientist": -3,
-    # Automotive-specific: penalize unless combined with industrial/product
+    "digital product": -4, "digital designer": -4,
+    "saas": -3, "software": -2, "app design": -3, "mobile app": -3,
+    "web app": -3, "platform": -2, "b2b": -1, "dashboard": -1,
+    # Automotive-specific: penalize
     "automotive designer": -2, "car designer": -2,
     "vehicle designer": -1, "automotive design": -1,
 }
@@ -107,10 +110,16 @@ def score_job(title, company="", description=""):
     return score, matched
 
 LEVEL_PATTERNS = {
-    "Junior": r'\b(junior|entry.level|graduate|jeune.diplômé|stagiaire|intern|stage)\b',
+    "Junior": r'\b(junior|entry.level|graduate|jeune.diplômé)\b',
     "Alternance": r'\b(alternance|apprentissage|contrat.pro)\b',
     "Confirmé": r'\b(confirmé|mid.level|senior|lead|expert|director)\b',
 }
+
+# Internships / stages — EXCLUDED from results entirely
+EXCLUDE_PATTERNS = [
+    r'\b(stage|intern|internship|stagiaire)\b',
+    r'\b(alternance|apprentissage|apprentice)\b',
+]
 CONTRACT_PATTERNS = {
     "CDI": r'\b(CDI|temps plein|permanent|full.time)\b',
     "CDD": r'\b(CDD|temps.déterminé|fixed.term)\b',
@@ -129,6 +138,23 @@ def extract_metrics(title, company=""):
         if re.search(pattern, text, re.IGNORECASE):
             metrics["contract"].append(contract)
     return metrics
+
+def is_internship(title):
+    """Check if this is an internship/stage to exclude."""
+    text = title.lower()
+    for pattern in EXCLUDE_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+    return False
+
+def is_french_job(title, location=""):
+    """Detect if a job is in French."""
+    text = f"{title} {location}".lower()
+    french_markers = ["f/h", "h/f", "stage", "alternance", "cdi", "cdd",
+                      "designer produit", "design industriel", "designer industriel",
+                      "france", "paris", "lyon", "marseille", "île-de-france",
+                      "suisse", "romand", "genève", "lausanne"]
+    return any(m in text for m in french_markers)
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -193,8 +219,10 @@ LINKEDIN_SEARCHES = [
     {"kw": "product designer", "locs": ["Switzerland"]},
     {"kw": "design industriel", "locs": ["Switzerland"]},
     {"kw": "designer industriel", "locs": ["Switzerland"]},
-    {"kw": "designer produkt", "locs": ["Switzerland"]},    # German
+    {"kw": "designer produkt", "locs": ["Switzerland"]},
     {"kw": "industrial designer", "locs": ["Switzerland"]},
+    {"kw": "produktdesigner", "locs": ["Switzerland"]},
+    {"kw": "produktgestalter", "locs": ["Switzerland"]},
     # ── Germany ──
     {"kw": "industrial design", "locs": ["Germany"]},
     {"kw": "produktdesigner", "locs": ["Germany"]},
@@ -560,11 +588,15 @@ def send_telegram_rich(new_jobs, all_count, new_count, today):
 
     html_parts = []
 
+    # Detect if most top jobs are French → use French headers
+    fr_count = sum(1 for j in new_top[:5] if is_french_job(j.get("title",""), j.get("location","")))
+    en = fr_count <= 2  # Majority French? Use FR headers
+
     if new_count == 0:
         html_parts.append(f"🔍 <b>Job Scan — {today}</b>")
-        html_parts.append(f"📊 {all_count} offres scannées · 0 nouvelle")
+        html_parts.append("📊 " + ("0 nouvelle aujourd'hui" if not en else "0 new today"))
         html_parts.append("")
-        html_parts.append("<i>Pas de nouvelle offre aujourd'hui.</i>")
+        html_parts.append("<i>" + ("Pas de nouvelle offre. À demain." if not en else "No new offers today.") + "</i>")
     else:
         top_icon = "🟢" if len(new_top) >= 5 else "🟡" if len(new_top) >= 2 else "⚪"
         html_parts.append(f"🔍 <b>ID Job Scan · {today}</b>")
@@ -573,7 +605,8 @@ def send_telegram_rich(new_jobs, all_count, new_count, today):
 
         # ── TOP PRIORITY  ──
         if new_top:
-            html_parts.append("<b>━━━ 🔥 TOP PRIORITY ━━━</b>")
+            section_title = "━━━ 🔥 TOP PRIORITY ━━━" if en else "━━━ 🔥 PRIORITÉ ━━━"
+            html_parts.append(f"<b>{section_title}</b>")
             html_parts.append("")
             for j in new_top[:12]:
                 flag = _country_flag(j.get("location", ""))
@@ -599,19 +632,24 @@ def send_telegram_rich(new_jobs, all_count, new_count, today):
                 html_parts.append(f"<b>{domain} {title}</b>")
                 html_parts.append(f"🏢 <b>{company}</b>")
                 html_parts.append(f"{flag} <b>{location}</b>")
-                html_parts.append(f"🎯 <b>Niveau:</b> {level_badge} {level_text}")
-                html_parts.append(f"📡 <b>Source:</b> {source}")
+                level_label = "Niveau" if en else "Niveau"
+                source_label = "Source" if en else "Source"
+                match_label = "Match" if en else "Match"
+                apply_label = "Postuler" if not en else "Apply"
+                html_parts.append(f"🎯 <b>{level_label}:</b> {level_badge} {level_text}")
+                html_parts.append(f"📡 <b>{source_label}:</b> {source}")
                 if matched:
-                    html_parts.append(f"🏷️ <b>Match:</b> {matched}")
+                    html_parts.append(f"🏷️ <b>{match_label}:</b> {matched}")
                 if link:
-                    html_parts.append(f'📩 <a href="{link}">Postuler / Voir l\'offre</a>')
+                    html_parts.append(f'📩 <a href="{link}">{apply_label} / Voir l\'offre</a>')
                 html_parts.append("")
                 html_parts.append("</details>")
             html_parts.append("")
 
         # ── GOOD MATCHES  ──
         if new_good:
-            html_parts.append("<b>━━━ ⭐ BON MATCH ━━━</b>")
+            section_title = "━━━ ⭐ BON MATCH ━━━" if en else "━━━ ⭐ BONS MATCHS ━━━"
+            html_parts.append(f"<b>{section_title}</b>")
             html_parts.append("")
             for j in new_good[:10]:
                 flag = _country_flag(j.get("location", ""))
@@ -833,6 +871,9 @@ def main():
             for job in jobs:
                 if job["link"] not in seen_links:
                     seen_links.add(job["link"])
+                    # Filter out internships
+                    if is_internship(job["title"]):
+                        continue
                     score, matched = score_job(job["title"], job["company"])
                     metrics = extract_metrics(job["title"], job["company"])
                     job["score"] = score
@@ -851,6 +892,9 @@ def main():
         metrics = extract_metrics(job["title"])
         job["score"] = score; job["matched"] = matched
         job["level"] = metrics["level"]; job["contract"] = metrics["contract"]
+        # Filter internships
+        if is_internship(job["title"]):
+            continue
         all_jobs.append(job)
     print(f"{len(lm_jobs)} jobs")
 
@@ -862,6 +906,9 @@ def main():
         metrics = extract_metrics(job["title"], job.get("company", ""))
         job["score"] = score; job["matched"] = matched
         job["level"] = metrics["level"]; job["contract"] = metrics["contract"]
+        # Filter internships
+        if is_internship(job["title"]):
+            continue
         all_jobs.append(job)
     print(f"{len(ro_jobs)} jobs")
 
